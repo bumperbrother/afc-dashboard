@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/*
+ * Dark command-center theme. Colours come from the validated data-viz
+ * reference palette (dark column), so the channel colours used on the
+ * calendar and the delivery bars are colourblind-safe against this surface.
+ */
+
+@theme {
+  /* Surfaces */
+  --color-plane: #0d0d0d;
+  --color-surface: #1a1a19;
+  --color-raised: #222221;
+  --color-hover: #2a2a28;
+
+  /* Ink */
+  --color-ink: #ffffff;
+  --color-ink-secondary: #c3c2b7;
+  --color-ink-muted: #898781;
+
+  /* Lines */
+  --color-hairline: #2c2c2a;
+  --color-line: #383835;
+
+  /* Categorical series, in fixed slot order. Never cycle past slot 8. */
+  --color-series-1: #3987e5;
+  --color-series-2: #d95926;
+  --color-series-3: #199e70;
+  --color-series-4: #c98500;
+  --color-series-5: #d55181;
+  --color-series-6: #008300;
+  --color-series-7: #9085e9;
+  --color-series-8: #e66767;
+
+  /* Status. Reserved: never reused as a series colour. */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-plane);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Dense scrollbars that do not fight the dark plane. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Visible focus for keyboard users, invisible for mouse users. */
+:focus-visible {
+  outline: 2px solid var(--color-series-1);
+  outline-offset: 2px;
+}
+
+/* Columns of numbers line up; standalone figures stay proportional. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
