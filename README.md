@@ -44,16 +44,64 @@ restarts, so every screen including Setup can be exercised.
 ## Reporting your schema
 
 Before connecting the whole app, it is worth dumping what your databases
-actually look like:
+actually look like. The result tells you, and anyone helping you, exactly
+which properties exist and what to map them to.
+
+`npm run schema:export` writes `notion-schema.json`: property names, types,
+status options, relation targets, row counts, and publish-date ranges. It
+reads no record content, so no titles or notes end up in the file and it is
+safe to share.
+
+### Running it in the browser, with nothing installed
+
+If you do not already have Node.js on your machine, this is the shorter path.
+GitHub Codespaces gives you a full development machine in a browser tab.
+
+1. Go to the repository on GitHub, click the green **Code** button, open the
+   **Codespaces** tab, and choose **Create codespace on main**. It takes a
+   minute to start.
+2. In the terminal at the bottom of the window, run `npm install`.
+3. Create the credentials file:
+
+   ```bash
+   cp .env.example .env.local
+   ```
+
+   Click `.env.local` in the file list on the left and fill in `NOTION_TOKEN`
+   and the five `NOTION_DB_*` ids. Save with Ctrl-S (Cmd-S on a Mac).
+4. Run it:
+
+   ```bash
+   npm run schema:export
+   ```
+
+5. `notion-schema.json` appears in the file list. Right-click it to download,
+   or commit it from the Source Control panel.
+
+Codespaces is free for a generous number of hours on a personal account, and
+you can delete the codespace when you are finished.
+
+### Running it on your own machine
+
+You need [Node.js](https://nodejs.org) 20 or newer. Check with `node --version`.
 
 ```bash
+git clone https://github.com/bumperbrother/afc-dashboard
+cd afc-dashboard
+npm install
+cp .env.example .env.local     # then fill in the token and database ids
 npm run schema:export
 ```
 
-This writes `notion-schema.json`: property names, types, status options,
-relation targets, row counts, and publish-date ranges. It reads no record
-content, so no titles or notes end up in the file and it is safe to share.
-Needs the same environment variables as the dashboard.
+The file lands in the project folder.
+
+### If it fails
+
+The script tells you what is wrong rather than dumping a stack trace. The two
+common failures are a missing value in `.env.local`, and a database that has
+not been shared with the integration, which shows as a 403. For the second,
+open that database in Notion and add the integration under `•••` ->
+Connections.
 
 ## Connecting Notion
 
