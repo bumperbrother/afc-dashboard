@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  # Pull requests cover branch work, so pushes only need to run on main.
+  # Watching every branch as well would run the whole suite twice on each
+  # push to an open PR, for the same commit.
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push supersedes whatever is still running for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+      # Builds against the bundled fixtures, so CI needs no Notion token.
+      - run: npm run build
+        env:
+          MOCK_NOTION: "1"

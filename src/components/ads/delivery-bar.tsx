@@ -1,5 +1,8 @@
 import type { DeliverySummary } from "@/lib/derive";
 
+/** Narrowest a non-zero segment is allowed to get. */
+const MIN_SEGMENT_PX = 6;
+
 /**
  * A stacked bar showing how far a sponsor's obligations have got: owed,
  * placed, published. Segments are separated by a 2px surface gap and the
@@ -43,6 +46,11 @@ export function DeliveryBar({
               backgroundColor: segment.color,
               flexGrow: segment.value,
               flexBasis: 0,
+              // A sponsor two years into a deal is nearly all delivered, which
+              // would squeeze what is still owed down to nothing. Anything
+              // non-zero stays wide enough to see; the counts beside the bar
+              // carry the exact figures.
+              minWidth: MIN_SEGMENT_PX,
             }}
           />
         ))}

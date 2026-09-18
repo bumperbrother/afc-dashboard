@@ -71,6 +71,43 @@ function person(index: number): Person[] {
   return [PEOPLE[index % PEOPLE.length]];
 }
 
+/**
+ * Deterministic pseudo-random from a string, so sample numbers stay stable
+ * between runs and screenshots do not churn.
+ */
+function seeded(key: string, min: number, max: number): number {
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const unit = ((hash >>> 0) % 10000) / 10000;
+  return Math.round(min + unit * (max - min));
+}
+
+/**
+ * Performance numbers, only on pieces that have actually published, and only
+ * on the channel where that number makes sense: views for video, opens and
+ * clicks for the newsletter.
+ */
+function sampleMetrics(
+  id: string,
+  channels: string[],
+  published: boolean,
+): MediaItem["metrics"] {
+  if (!published) return { views: null, opens: null, clicks: null };
+  const channel = channels[0] ?? "";
+
+  if (channel === "Newsletter") {
+    const opens = seeded(`${id}-opens`, 3200, 9800);
+    return { views: null, opens, clicks: Math.round(opens * 0.07) };
+  }
+  if (channel === "Podcast") {
+    return { views: seeded(`${id}-plays`, 1800, 12000), opens: null, clicks: null };
+  }
+  return { views: seeded(`${id}-views`, 4000, 145000), opens: null, clicks: null };
+}
+
 function media(
   id: string,
   source: MediaSource,
@@ -95,6 +132,7 @@ function media(
       statusIndex === 5 ? `https://example.com/watch/${id.slice(-4)}` : null,
     parentId,
     adIds: [],
+    metrics: sampleMetrics(id, channels, statusIndex === 5),
   };
 }
 
@@ -369,3 +407,125 @@ export const MOCK_DATABASE_IDS: Record<string, string> = {
   ads: "db-ads",
   companies: "db-companies",
 };
+
+/**
+ * Bulk back-catalogue, generated so the app can be exercised at the scale it
+ * will actually meet: roughly 500 to 2,000 rows rather than the few dozen
+ * hand-written records above. Pagination, the recent window, and placement
+ * search all behave differently at size, and a claim about them is only worth
+ * anything if it was tested against something realistic.
+ *
+ * Everything is derived from a seed, so two runs produce the same data and
+ * screenshots do not churn.
+ */
+
+const BULK_TOPICS = [
+  "Pricing", "Staffing", "Advisory", "Tax season", "Client onboarding",
+  "Partner comp", "Automation", "Niching", "Cash flow", "Offshoring",
+  "Capacity", "Retention", "Valuation", "Software", "Hiring",
+  "Firm culture", "Billing", "Succession", "Marketing", "Bookkeeping",
+];
+
+const BULK_SHAPES = [
+  "what nobody tells you about {t}",
+  "the {t} playbook",
+  "{t}: three mistakes to avoid",
+  "how we rebuilt our {t} process",
+  "a better way to think about {t}",
+  "{t} for firms under 20 staff",
+  "the real numbers behind {t}",
+  "why {t} breaks at scale",
+];
+
+function bulkTitle(index: number): string {
+  const topic = BULK_TOPICS[index % BULK_TOPICS.length];
+  const shape = BULK_SHAPES[Math.floor(index / BULK_TOPICS.length) % BULK_SHAPES.length];
+  const title = shape.replace("{t}", topic.toLowerCase());
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+
+/**
+ * Build the archive: two years of past publishing across all three media
+ * databases. Every generated item is published and dated in the past, so the
+ * hand-written records above remain the only things in the live pipeline and
+ * the readable views stay readable.
+ */
+function buildBackCatalogue(): {
+  content: MediaItem[];
+  shorts: MediaItem[];
+  clips: MediaItem[];
+} {
+  const content: MediaItem[] = [];
+  const shorts: MediaItem[] = [];
+  const clips: MediaItem[] = [];
+
+  const CHANNELS = ["YouTube", "Newsletter", "Podcast"];
+
+  // Two years back, a few pieces a week.
+  for (let i = 0; i < 420; i++) {
+    const id = `ct-arch-${String(i).padStart(4, "0")}`;
+    const dayOffset = -(30 + i * 2 + seeded(`${id}-jitter`, 0, 1));
+    const channel = CHANNELS[i % CHANNELS.length];
+    content.push(
+      media(id, "content", bulkTitle(i), [channel], 5, dayOffset, i % 4),
+    );
+
+    // Most long-form pieces spawned a short and about half spawned a clip.
+    if (i % 4 !== 3) {
+      const shortId = `sh-arch-${String(i).padStart(4, "0")}`;
+      shorts.push(
+        media(shortId, "shorts", `${bulkTitle(i)} (clip)`, ["Shorts"], 5, dayOffset + 1, i % 4, id),
+      );
+    }
+    if (i % 2 === 0) {
+      const clipId = `cl-arch-${String(i).padStart(4, "0")}`;
+      clips.push(
+        media(clipId, "clips", `Full clip: ${bulkTitle(i).toLowerCase()}`, ["Clips"], 5, dayOffset + 2, 2, id),
+      );
+    }
+  }
+
+  return { content, shorts, clips };
+}
+
+/**
+ * Historic ads spread across the back catalogue, including some placed on
+ * pieces old enough to fall outside the default six-month window. Those are
+ * exactly the records that would look wrongly "unplaced" without the
+ * placement backfill in the store, so the fixtures need them.
+ */
+function buildBackCatalogueAds(archive: MediaItem[]): Ad[] {
+  const companyIds = MOCK_COMPANIES.map((company) => company.id);
+  const types = ["Mid-roll", "Pre-roll", "Host read", "Newsletter primary"];
+  const ads: Ad[] = [];
+
+  for (let i = 0; i < 180; i++) {
+    const target = archive[i * 2];
+    if (!target) break;
+    const id = `ad-arch-${String(i).padStart(4, "0")}`;
+    ads.push(
+      ad(
+        id,
+        `${MOCK_COMPANIES[i % companyIds.length].title} – archive read #${i + 1}`,
+        companyIds[i % companyIds.length],
+        2,
+        { source: "content", id: target.id },
+        Number(target.publishDate ? -1 : 0) - seeded(`${id}-due`, 0, 5),
+        types[i % types.length],
+      ),
+    );
+  }
+
+  return ads;
+}
+
+const BACK_CATALOGUE = buildBackCatalogue();
+
+/** Everything, hand-written records first so they lead the readable views. */
+export const ALL_CONTENT: MediaItem[] = [...MOCK_CONTENT, ...BACK_CATALOGUE.content];
+export const ALL_SHORTS: MediaItem[] = [...MOCK_SHORTS, ...BACK_CATALOGUE.shorts];
+export const ALL_CLIPS: MediaItem[] = [...MOCK_CLIPS, ...BACK_CATALOGUE.clips];
+export const ALL_ADS: Ad[] = [
+  ...MOCK_ADS,
+  ...buildBackCatalogueAds(BACK_CATALOGUE.content),
+];

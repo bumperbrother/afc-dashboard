@@ -15,7 +15,7 @@ import {
   SOURCE_LABEL,
   STATUS_BUCKET_COLOR,
 } from "@/lib/presentation";
-import { AD_STATE_LABELS, type AdWithRefs, type MediaItem } from "@/lib/types";
+import { AD_STATE_LABELS, type AdWithRefs } from "@/lib/types";
 import type { StatusOption } from "@/lib/status-options";
 
 /**
@@ -24,11 +24,9 @@ import type { StatusOption } from "@/lib/status-options";
  */
 export function AdsTable({
   ads,
-  candidates,
   statusOptions,
 }: {
   ads: AdWithRefs[];
-  candidates: MediaItem[];
   statusOptions: StatusOption[];
 }) {
   const [placing, setPlacing] = useState<AdWithRefs | null>(null);
@@ -131,11 +129,7 @@ export function AdsTable({
       })}
 
       {placing && (
-        <PlacePicker
-          ad={placing}
-          candidates={candidates}
-          onClose={() => setPlacing(null)}
-        />
+        <PlacePicker ad={placing} onClose={() => setPlacing(null)} />
       )}
     </div>
   );
@@ -164,7 +158,9 @@ function AdRow({
   };
 
   const needsAttention =
-    ad.state === "overdue" || ad.state === "placedUnscheduled";
+    ad.state === "overdue" ||
+    ad.state === "placedUnscheduled" ||
+    ad.state === "liveUnlinked";
 
   return (
     <tr
@@ -313,10 +309,11 @@ function stateRank(ad: AdWithRefs): number {
     overdue: 0,
     placedUnscheduled: 1,
     dueSoon: 2,
-    unplaced: 3,
-    placedUpcoming: 4,
-    live: 5,
-    cancelled: 6,
+    liveUnlinked: 3,
+    unplaced: 4,
+    placedUpcoming: 5,
+    live: 6,
+    cancelled: 7,
   };
   return order[ad.state] ?? 9;
 }

@@ -28,6 +28,9 @@ const MEDIA_ROLES: Role[] = [
   { key: "publishDate", label: "Publish date", hint: "When it goes out", required: true },
   { key: "owner", label: "Owner", hint: "Who is responsible" },
   { key: "url", label: "Published link", hint: "Link to the live piece" },
+  { key: "views", label: "Views", hint: "View or play count, if tracked" },
+  { key: "opens", label: "Opens", hint: "Newsletter opens or recipients" },
+  { key: "clicks", label: "Clicks", hint: "Click-throughs, if tracked" },
 ];
 
 const CONTENT_ROLES: Role[] = [

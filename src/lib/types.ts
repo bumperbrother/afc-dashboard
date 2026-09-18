@@ -51,6 +51,18 @@ export const AD_BUCKET_LABELS: Record<AdBucket, string> = {
   cancelled: "Cancelled",
 };
 
+/** Performance numbers on a published piece. */
+export interface Metrics {
+  views: number | null;
+  opens: number | null;
+  clicks: number | null;
+}
+
+/** True when a piece has at least one performance number recorded. */
+export function hasMetrics(metrics: Metrics): boolean {
+  return metrics.views !== null || metrics.opens !== null || metrics.clicks !== null;
+}
+
 /** A person from a Notion people property. */
 export interface Person {
   id: string;
@@ -93,6 +105,12 @@ export interface MediaItem extends BaseRecord {
   parentId: string | null;
   /** Ids of ads placed on this item. Populated by the store's join step. */
   adIds: string[];
+  /**
+   * Performance numbers, where the properties are mapped and the row has a
+   * value. Absent rather than zero when unknown: a video with no view count
+   * recorded is not a video with no views.
+   */
+  metrics: Metrics;
 }
 
 /** A sponsor / brand from the companies database. */
@@ -120,6 +138,7 @@ export type AdState =
   | "placedUnscheduled" // assigned, but the media has no publish date
   | "placedUpcoming" // assigned to media with a future publish date
   | "live" // assigned to media that has published
+  | "liveUnlinked" // marked published, but nothing is linked to it
   | "cancelled";
 
 export const AD_STATE_LABELS: Record<AdState, string> = {
@@ -129,6 +148,7 @@ export const AD_STATE_LABELS: Record<AdState, string> = {
   placedUnscheduled: "Placed, no date",
   placedUpcoming: "Placed, upcoming",
   live: "Live",
+  liveUnlinked: "Live, not linked",
   cancelled: "Cancelled",
 };
 

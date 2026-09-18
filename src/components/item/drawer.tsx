@@ -20,7 +20,13 @@ import {
   updatePublishDate,
   updateStatus,
 } from "@/lib/notion/mutations";
-import { AD_STATE_LABELS, type AdWithRefs, type MediaItem, type Person } from "@/lib/types";
+import {
+  AD_STATE_LABELS,
+  hasMetrics,
+  type AdWithRefs,
+  type MediaItem,
+  type Person,
+} from "@/lib/types";
 import type { StatusOption } from "@/lib/status-options";
 
 /**
@@ -230,6 +236,22 @@ export function ItemDrawer({
               </ul>
             )}
           </Field>
+
+          {hasMetrics(item.metrics) && (
+            <Field label="Performance">
+              <dl className="space-y-1 text-[11px]">
+                {item.metrics.views !== null && (
+                  <Row label="Views">{item.metrics.views.toLocaleString()}</Row>
+                )}
+                {item.metrics.opens !== null && (
+                  <Row label="Opens">{item.metrics.opens.toLocaleString()}</Row>
+                )}
+                {item.metrics.clicks !== null && (
+                  <Row label="Clicks">{item.metrics.clicks.toLocaleString()}</Row>
+                )}
+              </dl>
+            </Field>
+          )}
 
           <dl className="mt-4 space-y-1.5 border-t border-hairline pt-3 text-[11px]">
             <Row label="Publishes">{formatDate(item.publishDate)}</Row>

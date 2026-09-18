@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Dot } from "@/components/ui/primitives";
 import { placeAd } from "@/lib/notion/mutations";
@@ -12,8 +12,11 @@ import {
   sourceColor,
   STATUS_BUCKET_COLOR,
 } from "@/lib/presentation";
-import { parseDate } from "@/lib/derive";
-import type { AdWithRefs, MediaItem } from "@/lib/types";
+import type { AdWithRefs } from "@/lib/types";
+import {
+  searchPlacementTargets,
+  type PlacementCandidate,
+} from "@/app/ads/actions";
 
 /**
  * Pick the piece of media an ad runs on. Only main content and shorts are
@@ -21,15 +24,15 @@ import type { AdWithRefs, MediaItem } from "@/lib/types";
  */
 export function PlacePicker({
   ad,
-  candidates,
   onClose,
 }: {
   ad: AdWithRefs;
-  candidates: MediaItem[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<PlacementCandidate[]>([]);
+  const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -42,32 +45,31 @@ export function PlacePicker({
   }, [onClose]);
 
   /**
-   * Upcoming items first, since an ad almost always goes on something not yet
-   * published; already-published items stay reachable at the bottom.
+   * Results come from the server, debounced, so the page never has to carry
+   * every content row just in case someone opens this dialog.
    */
-  const ordered = useMemo(() => {
-    const now = Date.now();
-    const search = query.trim().toLowerCase();
-    return candidates
-      .filter(
-        (item) =>
-          item.source !== "clips" &&
-          (!search || item.title.toLowerCase().includes(search)),
-      )
-      .map((item) => {
-        const date = parseDate(item.publishDate);
-        const time = date ? date.getTime() : null;
-        const upcoming = time !== null && time >= now;
-        return { item, time, upcoming };
+  const runSearch = useCallback((term: string) => {
+    let cancelled = false;
+    setLoading(true);
+    searchPlacementTargets(term)
+      .then((found) => {
+        if (!cancelled) setResults(found);
       })
-      .sort((a, b) => {
-        if (a.upcoming !== b.upcoming) return a.upcoming ? -1 : 1;
-        if (a.time === null) return b.time === null ? 0 : 1;
-        if (b.time === null) return -1;
-        return a.upcoming ? a.time - b.time : b.time - a.time;
+      .catch(() => {
+        if (!cancelled) setError("Could not load placement options.");
       })
-      .slice(0, 60);
-  }, [candidates, query]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => runSearch(query), query === "" ? 0 : 200);
+    return () => clearTimeout(timer);
+  }, [query, runSearch]);
 
   const assign = (target: { source: "content" | "shorts"; id: string } | null) => {
     setError(null);
@@ -122,34 +124,34 @@ export function PlacePicker({
         )}
 
         <ul className="flex-1 overflow-y-auto">
-          {ordered.length === 0 && (
+          {loading && results.length === 0 && (
+            <li className="px-4 py-6 text-center text-[12px] text-ink-muted">
+              Searching…
+            </li>
+          )}
+          {!loading && results.length === 0 && (
             <li className="px-4 py-6 text-center text-[12px] text-ink-muted">
               Nothing matches that search.
             </li>
           )}
-          {ordered.map(({ item, upcoming }) => {
+          {results.map((item) => {
             const current = ad.placement?.id === item.id;
+            const upcoming = item.upcoming;
             return (
               <li key={item.id}>
                 <button
                   type="button"
                   disabled={pending || current}
-                  onClick={() =>
-                    assign({
-                      source: item.source as "content" | "shorts",
-                      id: item.id,
-                    })
-                  }
+                  onClick={() => assign({ source: item.source, id: item.id })}
                   className="flex w-full items-center gap-2 border-b border-hairline px-4 py-2 text-left transition-colors hover:bg-raised disabled:opacity-60"
                 >
                   <span
                     aria-hidden
                     className="h-7 w-0.5 shrink-0 rounded"
                     style={{
-                      backgroundColor:
-                        item.channels.length > 0
-                          ? channelColor(item.channels[0])
-                          : sourceColor(item.source),
+                      backgroundColor: item.channel
+                        ? channelColor(item.channel)
+                        : sourceColor(item.source),
                     }}
                   />
                   <span className="min-w-0 flex-1">
@@ -165,20 +167,26 @@ export function PlacePicker({
                       <span className="whitespace-nowrap">
                         {SOURCE_LABEL[item.source]}
                       </span>
-                      {item.channels.length > 0 && (
-                        <span className="whitespace-nowrap">{item.channels[0]}</span>
+                      {item.channel && (
+                        <span className="whitespace-nowrap">{item.channel}</span>
                       )}
                       <span className="whitespace-nowrap">
                         {formatDate(item.publishDate)}
                         {item.publishDate && ` (${formatRelative(item.publishDate)})`}
                       </span>
                       <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                        <Dot color={STATUS_BUCKET_COLOR[item.status.bucket]} />
-                        {item.status.name ?? "No status"}
+                        <Dot
+                          color={
+                            STATUS_BUCKET_COLOR[
+                              item.statusBucket as keyof typeof STATUS_BUCKET_COLOR
+                            ] ?? "var(--color-ink-muted)"
+                          }
+                        />
+                        {item.statusName ?? "No status"}
                       </span>
-                      {item.adIds.length > 0 && (
+                      {item.adCount > 0 && (
                         <span className="whitespace-nowrap text-warning">
-                          {item.adIds.length} ad already here
+                          {item.adCount} ad already here
                         </span>
                       )}
                     </span>

@@ -1,13 +1,13 @@
 import type { Ad, Company, MediaItem, MediaSource, Person } from "@/lib/types";
 import {
-  MOCK_ADS,
+  ALL_ADS,
+  ALL_CLIPS,
+  ALL_CONTENT,
+  ALL_SHORTS,
   MOCK_AD_STATUS_OPTIONS,
-  MOCK_CLIPS,
   MOCK_COMPANIES,
-  MOCK_CONTENT,
   MOCK_CONTENT_STATUS_OPTIONS,
   MOCK_PEOPLE,
-  MOCK_SHORTS,
 } from "./fixtures";
 
 /**
@@ -32,10 +32,10 @@ function clone<T>(value: T): T {
 
 function createState(): MockState {
   return {
-    content: clone(MOCK_CONTENT),
-    shorts: clone(MOCK_SHORTS),
-    clips: clone(MOCK_CLIPS),
-    ads: clone(MOCK_ADS),
+    content: clone(ALL_CONTENT),
+    shorts: clone(ALL_SHORTS),
+    clips: clone(ALL_CLIPS),
+    ads: clone(ALL_ADS),
     companies: clone(MOCK_COMPANIES),
   };
 }
