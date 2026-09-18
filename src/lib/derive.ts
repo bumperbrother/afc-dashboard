@@ -1,4 +1,11 @@
-import type { Ad, AdState, MediaItem, Snapshot, StatusBucket } from "@/lib/types";
+import type {
+  Ad,
+  AdState,
+  AdWithRefs,
+  MediaItem,
+  Snapshot,
+  StatusBucket,
+} from "@/lib/types";
 
 /** Ads due within this many days count as "due soon". */
 export const DUE_SOON_DAYS = 14;
@@ -54,7 +61,12 @@ export function deriveAdState(
 ): AdState {
   if (ad.status.bucket === "cancelled") return "cancelled";
 
-  if (ad.status.bucket === "published") return "live";
+  if (ad.status.bucket === "published") {
+    // The team's own status is trusted, but an ad nobody linked to a piece of
+    // media is a gap in the record: it cannot be reported on, and nobody can
+    // tell where it ran. Say so rather than showing "Live" beside "Not placed".
+    return placedOn ? "live" : "liveUnlinked";
+  }
 
   if (!placedOn) {
     const due = parseDate(ad.dueDate);
@@ -79,6 +91,7 @@ export const AT_RISK_STATES: AdState[] = [
   "overdue",
   "dueSoon",
   "placedUnscheduled",
+  "liveUnlinked",
 ];
 
 export function isAtRisk(state: AdState): boolean {
@@ -218,4 +231,122 @@ function sourceLabel(item: MediaItem): string {
   if (item.source === "shorts") return "Shorts";
   if (item.source === "clips") return "Clips";
   return "Content";
+}
+
+/**
+ * The middle value, or null when there is nothing to take a middle of.
+ *
+ * Performance summaries use a median rather than a mean on purpose: one
+ * breakout video would drag an average far above what a typical piece does,
+ * and "what does a normal video get" is the question being asked.
+ */
+export function median(values: number[]): number | null {
+  const sorted = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[middle - 1] + sorted[middle]) / 2)
+    : sorted[middle];
+}
+
+/** Typical performance for one channel's recently published pieces. */
+export interface ChannelPerformance {
+  channel: string;
+  /** Median views, where views are recorded. */
+  medianViews: number | null;
+  /** Median opens, for channels measured that way. */
+  medianOpens: number | null;
+  /** How many published pieces the medians are drawn from. */
+  sampleSize: number;
+}
+
+/**
+ * Median performance per channel across published pieces, strongest first.
+ * Channels with nothing recorded are left out rather than shown as zero.
+ */
+export function performanceByChannel(
+  items: MediaItem[],
+  limitPerChannel = 12,
+): ChannelPerformance[] {
+  const published = items
+    .filter((item) => item.status.bucket === "published")
+    .sort((a, b) => {
+      const aTime = parseDate(a.publishDate)?.getTime() ?? 0;
+      const bTime = parseDate(b.publishDate)?.getTime() ?? 0;
+      return bTime - aTime;
+    });
+
+  const byChannel = new Map<string, MediaItem[]>();
+  for (const item of published) {
+    for (const channel of item.channels.length > 0 ? item.channels : ["Other"]) {
+      const bucket = byChannel.get(channel) ?? [];
+      // Most recent pieces only: a two-year-old average says little about how
+      // the channel performs now.
+      if (bucket.length < limitPerChannel) bucket.push(item);
+      byChannel.set(channel, bucket);
+    }
+  }
+
+  const results: ChannelPerformance[] = [];
+  for (const [channel, pieces] of byChannel) {
+    const medianViews = median(
+      pieces.map((p) => p.metrics.views).filter((v): v is number => v !== null),
+    );
+    const medianOpens = median(
+      pieces.map((p) => p.metrics.opens).filter((v): v is number => v !== null),
+    );
+    if (medianViews === null && medianOpens === null) continue;
+    results.push({ channel, medianViews, medianOpens, sampleSize: pieces.length });
+  }
+
+  return results.sort(
+    (a, b) => (b.medianViews ?? b.medianOpens ?? 0) - (a.medianViews ?? a.medianOpens ?? 0),
+  );
+}
+
+/**
+ * Total reach delivered for a sponsor: the audience their live placements
+ * actually reached. This is the number that goes in a sponsor report.
+ */
+export function deliveredReach(ads: AdWithRefs[]): {
+  views: number | null;
+  opens: number | null;
+  placements: number;
+} {
+  let views = 0;
+  let opens = 0;
+  let sawViews = false;
+  let sawOpens = false;
+  let placements = 0;
+
+  for (const ad of ads) {
+    if (ad.state !== "live" || !ad.placedOn) continue;
+    placements += 1;
+    if (ad.placedOn.metrics.views !== null) {
+      views += ad.placedOn.metrics.views;
+      sawViews = true;
+    }
+    if (ad.placedOn.metrics.opens !== null) {
+      opens += ad.placedOn.metrics.opens;
+      sawOpens = true;
+    }
+  }
+
+  return {
+    views: sawViews ? views : null,
+    opens: sawOpens ? opens : null,
+    placements,
+  };
+}
+
+/** Compact number for dense tables: 1.2k, 145k, 1.4m. */
+export function formatCount(value: number | null): string {
+  if (value === null) return "—";
+  if (Math.abs(value) >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+  }
+  if (Math.abs(value) >= 1_000) {
+    return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return String(value);
 }

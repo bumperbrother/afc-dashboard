@@ -32,6 +32,14 @@ const mediaMappingBase = z.object({
   owner: propertyName.nullable().default(null),
   /** URL property linking to the published piece. */
   url: propertyName.nullable().default(null),
+  /**
+   * Performance numbers, all optional and all `number` properties. Mapped per
+   * database so YouTube views and newsletter opens can live in their own
+   * fields rather than being forced into one.
+   */
+  views: propertyName.nullable().default(null),
+  opens: propertyName.nullable().default(null),
+  clicks: propertyName.nullable().default(null),
   /** How each status option maps onto a dashboard bucket. */
   statusBuckets: statusBucketMap.default({}),
   /** Bucket used for any status option not listed above. */

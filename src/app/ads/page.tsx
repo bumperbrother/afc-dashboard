@@ -23,6 +23,7 @@ export const dynamic = "force-dynamic";
 const STATE_ORDER: AdState[] = [
   "overdue",
   "placedUnscheduled",
+  "liveUnlinked",
   "dueSoon",
   "unplaced",
   "placedUpcoming",
@@ -94,11 +95,7 @@ export default async function AdsPage({
         </div>
       }
     >
-      <AdsTable
-        ads={ads}
-        candidates={[...snapshot.content, ...snapshot.shorts]}
-        statusOptions={options.adStatus}
-      />
+      <AdsTable ads={ads} statusOptions={options.adStatus} />
     </AppShell>
   );
 }

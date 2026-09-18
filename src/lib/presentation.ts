@@ -69,6 +69,7 @@ export const AD_STATE_COLOR: Record<AdState, string> = {
   placedUnscheduled: "var(--color-serious)",
   placedUpcoming: "var(--color-series-1)",
   live: "var(--color-good)",
+  liveUnlinked: "var(--color-warning)",
   cancelled: "var(--color-ink-muted)",
 };
 

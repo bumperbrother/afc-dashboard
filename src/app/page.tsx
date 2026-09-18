@@ -7,8 +7,11 @@ import { Card, Dot, EmptyState } from "@/components/ui/primitives";
 import { getSnapshot } from "@/lib/notion/store";
 import {
   computeOverviewStats,
+  deliveredReach,
   endOfWeek,
+  formatCount,
   mediaInRange,
+  performanceByChannel,
   startOfWeek,
   summarizeDelivery,
 } from "@/lib/derive";
@@ -51,14 +54,19 @@ export default async function OverviewPage() {
     .slice(0, 12);
 
   const bySponsor = snapshot.companies
-    .map((company) => ({
-      company,
-      summary: summarizeDelivery(
-        snapshot.ads.filter((ad) => ad.companyId === company.id),
-      ),
-    }))
+    .map((company) => {
+      const ads = snapshot.ads.filter((ad) => ad.companyId === company.id);
+      return {
+        company,
+        summary: summarizeDelivery(ads),
+        reach: deliveredReach(ads),
+      };
+    })
     .filter((entry) => entry.summary.total > 0)
     .sort((a, b) => b.summary.owed - a.summary.owed);
+
+  // Only rendered when the metric properties are mapped and populated.
+  const performance = performanceByChannel(allMedia(snapshot));
 
   const empty =
     snapshot.content.length === 0 &&
@@ -203,6 +211,31 @@ export default async function OverviewPage() {
             </Card>
           </div>
 
+          {performance.length > 0 && (
+            <Card title="Typical performance">
+              <ul className="divide-y divide-hairline">
+                {performance.map((entry) => (
+                  <li
+                    key={entry.channel}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
+                  >
+                    <span className="flex w-40 shrink-0 items-center gap-1.5 text-[12px] text-ink">
+                      <Dot color={channelColor(entry.channel)} />
+                      {entry.channel}
+                    </span>
+                    <span className="tabular text-[13px] text-ink">
+                      {formatCount(entry.medianViews ?? entry.medianOpens)}
+                    </span>
+                    <span className="text-[11px] text-ink-muted">
+                      median {entry.medianViews !== null ? "views" : "opens"} across the
+                      last {entry.sampleSize} published
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
           {bySponsor.length > 0 && (
             <Card
               title="Delivery by sponsor"
@@ -216,7 +249,7 @@ export default async function OverviewPage() {
               }
             >
               <ul className="divide-y divide-hairline">
-                {bySponsor.map(({ company, summary }) => (
+                {bySponsor.map(({ company, summary, reach }) => (
                   <li
                     key={company.id}
                     className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
@@ -230,6 +263,14 @@ export default async function OverviewPage() {
                     {summary.overdue > 0 && (
                       <span className="text-[11px] text-critical">
                         {summary.overdue} overdue
+                      </span>
+                    )}
+                    {(reach.views !== null || reach.opens !== null) && (
+                      <span
+                        className="tabular text-[11px] text-ink-muted"
+                        title={`Total audience across ${reach.placements} live placement${reach.placements === 1 ? "" : "s"}`}
+                      >
+                        {formatCount(reach.views ?? reach.opens)} delivered
                       </span>
                     )}
                     <div className="ml-auto">

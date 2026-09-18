@@ -68,6 +68,7 @@ export function parseAdFilters(params: SearchParams): AdFilters {
       "placedUnscheduled",
       "placedUpcoming",
       "live",
+      "liveUnlinked",
       "cancelled",
     ].includes(value),
   );

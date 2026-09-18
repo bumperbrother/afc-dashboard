@@ -2,6 +2,7 @@ import type { Client } from "@notionhq/client";
 import type {
   DataSourceObjectResponse,
   PageObjectResponse,
+  QueryDataSourceParameters,
 } from "@notionhq/client/build/src/api-endpoints";
 import type { SchemaProperty } from "@/lib/mapping/heuristics";
 import type { SourceKey } from "@/lib/types";
@@ -123,9 +124,40 @@ export function toSchemaProperties(
   return properties;
 }
 
-/** Fetch every row of a database, following pagination to the end. */
+export type QueryFilter = QueryDataSourceParameters["filter"];
+
+/**
+ * Keep the recent past, everything upcoming, and everything undated.
+ *
+ * At a few thousand rows, loading a database's entire history on every
+ * refresh is the thing that makes this slow, and the archive is not what the
+ * team looks at. An empty date has to be included explicitly: an item still
+ * being planned has no publish date yet, and dropping those would hide the
+ * top of the pipeline.
+ */
+export function recentWindowFilter(
+  publishDateProperty: string,
+  windowStart: Date,
+): QueryFilter {
+  return {
+    or: [
+      {
+        property: publishDateProperty,
+        date: { on_or_after: windowStart.toISOString().slice(0, 10) },
+      },
+      { property: publishDateProperty, date: { is_empty: true } },
+    ],
+  } as QueryFilter;
+}
+
+/**
+ * Fetch rows of a database, following pagination to the end. Without a filter
+ * this is every row; with one, Notion does the narrowing before the data ever
+ * crosses the network.
+ */
 export async function fetchAllRows(
   source: SourceKey,
+  filter?: QueryFilter,
 ): Promise<PageObjectResponse[]> {
   const client = getNotionClient();
   if (!client) throw new Error("Notion is not configured (no NOTION_TOKEN).");
@@ -145,6 +177,7 @@ export async function fetchAllRows(
         data_source_id: dataSourceId,
         page_size: 100,
         start_cursor: cursor,
+        ...(filter ? { filter } : {}),
       }),
     );
 
@@ -197,4 +230,31 @@ function isRetryable(error: unknown): boolean {
     status === 429 ||
     status >= 500
   );
+}
+
+/**
+ * Fetch specific pages by id. Used to pull back the handful of media items
+ * that sit outside the recent window but still carry an ad, so a long-running
+ * sponsorship never looks unplaced just because its episode is old.
+ */
+export async function fetchPagesByIds(
+  ids: string[],
+): Promise<PageObjectResponse[]> {
+  const client = getNotionClient();
+  if (!client || ids.length === 0) return [];
+
+  const pages = await Promise.all(
+    ids.map(async (id) => {
+      try {
+        const page = await withRetry(() => client.pages.retrieve({ page_id: id }));
+        return "properties" in page ? (page as PageObjectResponse) : null;
+      } catch {
+        // A deleted page, or one the integration cannot see. The ad simply
+        // stays unresolved rather than failing the whole snapshot.
+        return null;
+      }
+    }),
+  );
+
+  return pages.filter((page): page is PageObjectResponse => page !== null);
 }

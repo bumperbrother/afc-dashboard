@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Dot, EmptyState } from "@/components/ui/primitives";
 import { ItemDrawer } from "@/components/item/drawer";
 import {
@@ -11,8 +11,9 @@ import {
   sourceColor,
   STATUS_BUCKET_COLOR,
 } from "@/lib/presentation";
-import { parseDate } from "@/lib/derive";
+import { formatCount, parseDate } from "@/lib/derive";
 import {
+  hasMetrics,
   STATUS_BUCKETS,
   STATUS_BUCKET_LABELS,
   type AdWithRefs,
@@ -24,6 +25,8 @@ import type { StatusOption } from "@/lib/status-options";
 
 type Grouping = "none" | "status";
 type SortKey = "date" | "title" | "status";
+
+const PAGE_SIZE = 100;
 
 /**
  * One table over all three media databases. Grouping by status gives the
@@ -43,19 +46,42 @@ export function ContentTable({
   const [grouping, setGrouping] = useState<Grouping>("none");
   const [sort, setSort] = useState<SortKey>("date");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
 
   const sorted = useMemo(() => sortItems(items, sort), [items, sort]);
 
+  // The column only earns its width if something is actually recorded.
+  const showMetrics = useMemo(
+    () => items.some((item) => hasMetrics(item.metrics)),
+    [items],
+  );
+
+  // A few thousand rows in one DOM tree makes scrolling and filtering crawl,
+  // so the flat view pages. Grouping by status splits the list small enough
+  // that paging it too would just hide rows for no gain.
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+
   const groups = useMemo(() => {
     if (grouping === "none") {
-      return [{ key: "all", label: null as string | null, items: sorted }];
+      const start = currentPage * PAGE_SIZE;
+      return [
+        {
+          key: "all",
+          label: null as string | null,
+          items: sorted.slice(start, start + PAGE_SIZE),
+        },
+      ];
     }
     return STATUS_BUCKETS.map((bucket) => ({
       key: bucket,
       label: STATUS_BUCKET_LABELS[bucket],
       items: sorted.filter((item) => item.status.bucket === bucket),
     })).filter((group) => group.items.length > 0);
-  }, [sorted, grouping]);
+  }, [sorted, grouping, currentPage]);
+
+  // Changing how the list is built invalidates whatever page you were on.
+  useEffect(() => setPage(0), [grouping, sort, items.length]);
 
   const selected = selectedId
     ? (items.find((item) => item.id === selectedId) ?? null)
@@ -106,7 +132,9 @@ export function ContentTable({
         </select>
 
         <span className="tabular ml-auto text-[11px] text-ink-muted">
-          {items.length} items
+          {grouping === "none" && sorted.length > PAGE_SIZE
+            ? `${currentPage * PAGE_SIZE + 1}–${Math.min((currentPage + 1) * PAGE_SIZE, sorted.length)} of ${sorted.length}`
+            : `${items.length} items`}
         </span>
       </div>
 
@@ -137,6 +165,9 @@ export function ContentTable({
                   <th className="px-3 py-1.5 font-normal">Publishes</th>
                   <th className="px-3 py-1.5 font-normal">Status</th>
                   <th className="px-3 py-1.5 font-normal">Owner</th>
+                  {showMetrics && (
+                    <th className="px-3 py-1.5 text-right font-normal">Reach</th>
+                  )}
                   <th className="px-3 py-1.5 font-normal">Ads</th>
                 </tr>
               </thead>
@@ -191,6 +222,14 @@ export function ContentTable({
                         <span className="text-ink-muted">Unassigned</span>
                       )}
                     </td>
+                    {showMetrics && (
+                      <td
+                        className="tabular px-3 py-1.5 text-right text-[11px] text-ink-secondary"
+                        title={metricTitle(item)}
+                      >
+                        {formatCount(item.metrics.views ?? item.metrics.opens)}
+                      </td>
+                    )}
                     <td className="px-3 py-1.5">
                       {item.adIds.length > 0 ? (
                         <span className="tabular rounded bg-raised px-1 text-[11px] text-ink-secondary">
@@ -208,6 +247,28 @@ export function ContentTable({
         </section>
       ))}
 
+      {grouping === "none" && pageCount > 1 && (
+        <div className="flex items-center justify-center gap-2 py-1">
+          <Button
+            size="sm"
+            disabled={currentPage === 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+          >
+            ← Previous
+          </Button>
+          <span className="tabular text-[11px] text-ink-muted">
+            Page {currentPage + 1} of {pageCount}
+          </span>
+          <Button
+            size="sm"
+            disabled={currentPage >= pageCount - 1}
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+          >
+            Next →
+          </Button>
+        </div>
+      )}
+
       {selected && (
         <ItemDrawer
           item={selected}
@@ -219,6 +280,21 @@ export function ContentTable({
       )}
     </div>
   );
+}
+
+/** Spell the numbers out on hover, since the column shows a compact form. */
+function metricTitle(item: MediaItem): string {
+  const parts: string[] = [];
+  if (item.metrics.views !== null) {
+    parts.push(`${item.metrics.views.toLocaleString()} views`);
+  }
+  if (item.metrics.opens !== null) {
+    parts.push(`${item.metrics.opens.toLocaleString()} opens`);
+  }
+  if (item.metrics.clicks !== null) {
+    parts.push(`${item.metrics.clicks.toLocaleString()} clicks`);
+  }
+  return parts.join(" · ") || "Nothing recorded";
 }
 
 const BUCKET_ORDER: Record<StatusBucket, number> = {

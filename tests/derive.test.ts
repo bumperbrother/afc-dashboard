@@ -28,6 +28,7 @@ function media(overrides: Partial<MediaItem> = {}): MediaItem {
     externalUrl: null,
     parentId: null,
     adIds: [],
+    metrics: { views: null, opens: null, clicks: null },
     ...overrides,
   };
 }

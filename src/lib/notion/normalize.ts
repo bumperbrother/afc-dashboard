@@ -13,6 +13,7 @@ import type {
   Company,
   MediaItem,
   MediaSource,
+  Metrics,
   Person,
   StatusBucket,
   StatusValue,
@@ -113,6 +114,26 @@ export function getNames(
   return [];
 }
 
+/**
+ * A numeric value. Rollups and formulas are read as well as plain numbers,
+ * since view counts are often rolled up from somewhere else.
+ */
+export function getNumber(
+  page: PageObjectResponse,
+  name: string | null,
+): number | null {
+  const value = property(page, name);
+  if (!value) return null;
+  if (value.type === "number") return value.number;
+  if (value.type === "formula" && value.formula.type === "number") {
+    return value.formula.number;
+  }
+  if (value.type === "rollup" && value.rollup.type === "number") {
+    return value.rollup.number;
+  }
+  return null;
+}
+
 export function getPeople(
   page: PageObjectResponse,
   name: string | null,
@@ -207,6 +228,11 @@ export function normalizeMediaItem(
     externalUrl: getUrl(page, mapping.url),
     parentId: parentIds[0] ?? null,
     adIds: [],
+    metrics: {
+      views: getNumber(page, mapping.views),
+      opens: getNumber(page, mapping.opens),
+      clicks: getNumber(page, mapping.clicks),
+    } satisfies Metrics,
   };
 }
 
